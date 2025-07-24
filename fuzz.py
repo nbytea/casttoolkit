@@ -1,7 +1,7 @@
 import ssl, socket, requests
 
 def fuzz_cast_v2(host, logger):
-    logger.info("[*] Fuzzing Cast v2 (8009)...")
+    print(f"[*] Fuzzing Cast v2 on {host}:8009...")
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
@@ -15,22 +15,25 @@ def fuzz_cast_v2(host, logger):
             b"\x00\x00\x00\x05\xff\xff\xff\xff\xff",
             b"\x00\x00\x00\x20" + b"A"*32
         ]
+
         for p in payloads:
-            logger.info(f"Sending {len(p)} bytes to Cast v2")
+            print(f"[*] Sending {len(p)} bytes...")
             try:
                 ssl_sock.send(p)
                 resp = ssl_sock.recv(64)
-                logger.info(f"Response: {resp}")
+                print(f"[+] Response: {resp}")
+                logger.info({"event": "fuzz_cast_v2", "payload_len": len(p), "response": str(resp)})
             except Exception as e:
-                logger.warning(f"No response / error: {e}")
+                print(f"[!] Error: {e}")
+                logger.info({"event": "fuzz_cast_v2_error", "payload_len": len(p), "error": str(e)})
 
         ssl_sock.close()
-
     except Exception as e:
-        logger.error(f"Cast v2 fuzz failed: {e}")
+        print(f"[!] Cast v2 fuzz failed: {e}")
+        logger.info({"event": "fuzz_cast_v2_failed", "error": str(e)})
 
 def fuzz_dial_endpoints(host, logger):
-    logger.info("[*] Fuzzing DIAL endpoints (8008)...")
+    print(f"[*] Fuzzing DIAL endpoints on {host}:8008...")
     endpoints = [
         "setup/eureka_info",
         "setup/reboot",
@@ -41,15 +44,18 @@ def fuzz_dial_endpoints(host, logger):
         "apps/YouTube",
         "apps/Backdrop"
     ]
-    results = {}
+
     for ep in endpoints:
         url = f"http://{host}:8008/{ep}"
         try:
-            r_get = requests.get(url, timeout=3)
-            r_post = requests.post(url, timeout=3)
-            results[ep] = {"GET": r_get.status_code, "POST": r_post.status_code}
-            logger.info(f"[GET] {ep} -> {r_get.status_code}, [POST] -> {r_post.status_code}")
+            r = requests.get(url, timeout=3)
+            logger.info({"event": "fuzz_dial_get", "endpoint": ep, "status": r.status_code})
+            print(f"[GET] {ep} -> {r.status_code}")
+
+            r = requests.post(url, timeout=3)
+            logger.info({"event": "fuzz_dial_post", "endpoint": ep, "status": r.status_code})
+            print(f"[POST] {ep} -> {r.status_code}")
         except Exception as e:
-            logger.warning(f"Error fuzzing {ep}: {e}")
-    return results
+            logger.info({"event": "fuzz_dial_error", "endpoint": ep, "error": str(e)})
+            print(f"[!] Error fuzzing {ep}: {e}")
 
