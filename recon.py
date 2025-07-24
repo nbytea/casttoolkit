@@ -1,42 +1,36 @@
 import pychromecast
+from utils import write_summary
 
 def discover_devices():
+    """Return list of Chromecast objects"""
     chromecasts, browser = pychromecast.get_chromecasts()
-    return [{
-        "name": c.cast_info.friendly_name,
-        "host": c.cast_info.host,
-        "model": c.cast_info.model_name,
-        "uuid": str(c.cast_info.uuid),
-    } for c in chromecasts]
-
-def recon_device(device, timestamp, logger):
-    """
-    Collects device info, status, and installed apps.
-    """
-    cc = pychromecast.Chromecast(device["host"])
-    cc.wait()
-
-    status = cc.status
-    apps = {}
-    if status.app_id:
-        apps[status.app_display_name] = {"app_id": status.app_id, "state": "running"}
+    if not chromecasts:
+        print("[-] No Chromecast devices found.")
     else:
-        apps["None"] = {"app_id": None, "state": "stopped"}
+        for i, cc in enumerate(chromecasts):
+            print(f"[{i}] {cc.cast_info.friendly_name} ({cc.cast_info.host}) - {cc.cast_info.model_name}")
+    return chromecasts
+
+def recon_device(cast, timestamp, logger):
+    """Dump device status + installed app info"""
+    cast.wait()
+    status = cast.status
 
     summary = {
-        "device": device["name"],
-        "ip": device["host"],
-        "model": device["model"],
-        "uuid": device["uuid"],
+        "device": cast.cast_info.friendly_name,
+        "host": cast.cast_info.host,
+        "model": cast.cast_info.model_name,
+        "uuid": str(cast.cast_info.uuid),
         "status": {
             "active_input": status.is_active_input,
             "standby": status.is_stand_by,
             "volume": status.volume_level,
-            "muted": status.volume_muted
-        },
-        "apps": apps
+            "muted": status.volume_muted,
+            "app": status.display_name,
+            "app_id": status.app_id
+        }
     }
-
     logger.info(f"Recon summary: {summary}")
+    write_summary(cast.cast_info.friendly_name, timestamp, summary)
     return summary
 
