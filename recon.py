@@ -1,67 +1,42 @@
-import requests
-from utils import write_summary
-from urllib.parse import urljoin
+import pychromecast
 
-KNOWN_APPS = [
-    "Netflix", "YouTube", "DisneyPlus", "PrimeVideo",
-    "Hulu", "Spotify", "Plex", "HBO", "Backdrop"
-]
-
-SETUP_ENDPOINTS = [
-    "eureka_info", "reboot", "factory_reset", "test_ota",
-    "diag", "config", "wifi_scan"
-]
+def discover_devices():
+    chromecasts, browser = pychromecast.get_chromecasts()
+    return [{
+        "name": c.cast_info.friendly_name,
+        "host": c.cast_info.host,
+        "model": c.cast_info.model_name,
+        "uuid": str(c.cast_info.uuid),
+    } for c in chromecasts]
 
 def recon_device(device, timestamp, logger):
     """
-    Perform recon on one device:
-      - Check installed apps
-      - Check setup endpoints
-    Returns summary dict (updated)
+    Collects device info, status, and installed apps.
     """
-    host = device['host']
-    base_url = f"http://{host}:8008/"
+    cc = pychromecast.Chromecast(device["host"])
+    cc.wait()
+
+    status = cc.status
+    apps = {}
+    if status.app_id:
+        apps[status.app_display_name] = {"app_id": status.app_id, "state": "running"}
+    else:
+        apps["None"] = {"app_id": None, "state": "stopped"}
+
     summary = {
-        "device": device['name'],
-        "timestamp": timestamp,
-        "ip": host,
-        "model": device.get("model"),
-        "apps": {},
-        "setup_endpoints": {}
+        "device": device["name"],
+        "ip": device["host"],
+        "model": device["model"],
+        "uuid": device["uuid"],
+        "status": {
+            "active_input": status.is_active_input,
+            "standby": status.is_stand_by,
+            "volume": status.volume_level,
+            "muted": status.volume_muted
+        },
+        "apps": apps
     }
 
-    for app in KNOWN_APPS:
-        url = urljoin(base_url, f"apps/{app}")
-        try:
-            r = requests.get(url, timeout=2)
-            if r.status_code == 200:
-                summary["apps"][app] = "installed"
-                logger.info(f"[+] App {app} installed (200)")
-            elif r.status_code == 404:
-                summary["apps"][app] = "not_found"
-                logger.debug(f"[-] App {app} not found (404)")
-            else:
-                summary["apps"][app] = f"status_{r.status_code}"
-                logger.warning(f"[?] App {app} unknown status ({r.status_code})")
-        except Exception as e:
-            summary["apps"][app] = "error"
-            logger.error(f"[!] Error checking {app}: {e}")
-
-    for ep in SETUP_ENDPOINTS:
-        ep_results = {}
-        for method in ["GET", "POST"]:
-            url = urljoin(base_url, f"setup/{ep}")
-            try:
-                if method == "GET":
-                    r = requests.get(url, timeout=2)
-                else:
-                    r = requests.post(url, timeout=2)
-                ep_results[method] = r.status_code
-                logger.info(f"[SETUP] {method} {ep} -> {r.status_code}")
-            except Exception as e:
-                ep_results[method] = "error"
-                logger.error(f"[!] Error {method} {ep}: {e}")
-        summary["setup_endpoints"][ep] = ep_results
-
+    logger.info(f"Recon summary: {summary}")
     return summary
 
