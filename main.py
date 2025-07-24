@@ -8,7 +8,7 @@ def main():
         print("[!] No devices found.")
         return
 
-    print("[*] Devices discovered:")
+    print("[*] Devices found:")
     for i, d in enumerate(devices):
         print(f"[{i}] {d['name']} ({d['host']}) - {d['model']}")
 
@@ -17,20 +17,13 @@ def main():
 
     for dev in targets:
         logger, ts = setup_logger(dev['name'])
-        logger.info(f"Selected device: {dev['name']} ({dev['host']})")
+        logger.info(f"Recon started for {dev['name']}")
 
-        summary = {
-            "device": dev['name'],
-            "timestamp": ts,
-            "model": dev.get("model"),
-            "ip": dev['host'],
-            "build_version": dev.get("build_version"),
-            "apps": {}
-        }
+        summary = recon_device(dev, ts, logger)
         write_summary(dev['name'], ts, summary)
 
-        # TODO: integrate control, recon, fuzz menus
-        print(f"[+] Logger and summary initialized for {dev['name']}")
+        logger.info(f"Recon completed for {dev['name']}")
+        print(f"[+] Recon complete for {dev['name']} (summary saved)")
 
 if __name__ == "__main__":
     main()
